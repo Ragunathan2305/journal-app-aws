@@ -1,0 +1,1298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>My Journal App</title>
+
+  <!--
+  ============================================================
+  FONT IMPORT
+  - 'Lora'       → elegant serif for headings (gives journal feel)
+  - 'DM Sans'    → clean sans-serif for body text and UI
+  ============================================================
+  -->
+  <link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+
+  <style>
+    /* ============================================================
+       CSS VARIABLES
+       - Central place to control all colors, fonts, spacing
+       - Change one value here → updates entire app automatically
+       - This is a best practice in production apps
+    ============================================================ */
+    :root {
+      --bg-main:        #F7F4EF;   /* warm off-white background */
+      --bg-card:        #FFFFFF;   /* white card background */
+      --bg-sidebar:     #EFEBE3;   /* slightly darker sidebar */
+      --accent:         #2D6A4F;   /* deep forest green accent */
+      --accent-light:   #95D5B2;   /* light green for hover states */
+      --accent-soft:    #D8F3DC;   /* very soft green for tags */
+      --text-primary:   #1A1A1A;   /* near black for main text */
+      --text-secondary: #5C5C5C;   /* grey for labels/timestamps */
+      --text-muted:     #9E9E9E;   /* light grey for placeholders */
+      --border:         #E0D9CE;   /* soft border color */
+      --danger:         #C0392B;   /* red for delete/error */
+      --shadow:         0 2px 12px rgba(0,0,0,0.06);
+      --radius:         12px;
+      --font-heading:   'Lora', Georgia, serif;
+      --font-body:      'DM Sans', sans-serif;
+    }
+
+    /* ============================================================
+       RESET & BASE
+       - Removes browser default spacing inconsistencies
+       - Sets base font and background for entire page
+    ============================================================ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font-body);
+      background: var(--bg-main);
+      color: var(--text-primary);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ============================================================
+       LAYOUT — APP SHELL
+       - Full height flex container
+       - Sidebar on left, main editor on right
+    ============================================================ */
+    #app {
+      display: flex; /* hidden until JS loads and renders content */
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ============================================================
+       SIDEBAR
+       - Shows list of past journal days
+       - Stats at bottom (streak + entry count)
+    ============================================================ */
+    #sidebar {
+      width: 240px;
+      min-width: 240px;
+      background: var(--bg-sidebar);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .sidebar-header {
+      padding: 24px 20px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .sidebar-title {
+      font-family: var(--font-heading);
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .sidebar-section { padding: 12px 8px; overflow-y: auto; flex: 1; }
+
+    .sidebar-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      padding: 4px 10px 8px;
+    }
+
+    /* Each day entry in the sidebar list */
+    .day-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      color: var(--text-secondary);
+      transition: background 0.15s;
+    }
+
+    .day-item:hover { background: rgba(0,0,0,0.05); color: var(--text-primary); }
+
+    /* Active day is highlighted */
+    .day-item.active {
+      background: var(--bg-card);
+      color: var(--text-primary);
+      font-weight: 500;
+      border: 1px solid var(--border);
+    }
+
+    /* Small dot indicator — green if day has content */
+    .day-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--border);
+      flex-shrink: 0;
+    }
+    .day-item.has-content .day-dot { background: var(--accent); }
+
+    /* Button to add a new day entry */
+    .add-day-btn {
+      margin: 8px;
+      padding: 9px 12px;
+      border-radius: 8px;
+      border: 1.5px dashed var(--border);
+      background: none;
+      color: var(--text-muted);
+      font-size: 13px;
+      font-family: var(--font-body);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      width: calc(100% - 16px);
+      transition: all 0.15s;
+    }
+    .add-day-btn:hover {
+      background: rgba(45,106,79,0.06);
+      color: var(--accent);
+      border-color: var(--accent-light);
+    }
+
+    /* Stats row at very bottom of sidebar */
+    .sidebar-footer {
+      padding: 14px;
+      border-top: 1px solid var(--border);
+    }
+
+    .stats-row { display: flex; gap: 8px; }
+
+    .stat-card {
+      flex: 1;
+      background: var(--bg-card);
+      border-radius: 8px;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+    }
+
+    .stat-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+    .stat-val { font-size: 20px; font-weight: 500; color: var(--text-primary); margin-top: 2px; }
+
+    /* ============================================================
+       MAIN EDITOR AREA
+       - Header with date, mood, tags
+       - Scrollable body with notes + tasks + reflections
+    ============================================================ */
+    #main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+    #editor-header {
+      padding: 24px 28px 16px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-card);
+      position: relative;
+    }
+
+    .date-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; }
+
+    .date-big {
+      font-family: var(--font-heading);
+      font-size: 26px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-top: 2px;
+    }
+
+    /* Mood emoji buttons row */
+    .mood-row { display: flex; gap: 6px; margin-top: 12px; }
+
+    .mood-btn {
+      font-size: 18px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      background: none;
+      cursor: pointer;
+      opacity: 0.45;
+      transition: all 0.15s;
+    }
+
+    .mood-btn:hover, .mood-btn.active {
+      opacity: 1;
+      background: var(--accent-soft);
+      border-color: var(--accent-light);
+      transform: scale(1.12);
+    }
+
+    /* Tag chips row */
+    .tag-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+
+    .tag {
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      background: var(--bg-sidebar);
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      user-select: none;
+      transition: all 0.15s;
+    }
+
+    .tag:hover { border-color: var(--accent-light); color: var(--accent); }
+
+    /* Active tag gets green fill */
+    .tag.active {
+      background: var(--accent-soft);
+      color: var(--accent);
+      border-color: var(--accent-light);
+      font-weight: 500;
+    }
+
+    /* Scrollable content area below header */
+    #editor-area { flex: 1; overflow-y: auto; padding: 24px 28px; background: var(--bg-main); }
+
+    /* Each section (notes / tasks / reflections) */
+    .section-block { margin-bottom: 28px; }
+
+    /* Section heading with line extending to right */
+    .section-heading {
+      font-size: 10px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .section-heading::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* Plain textarea for freeform writing */
+    .note-textarea {
+      width: 100%;
+      border: none;
+      background: none;
+      resize: none;
+      font-family: var(--font-body);
+      font-size: 14.5px;
+      color: var(--text-primary);
+      line-height: 1.8;
+      outline: none;
+      min-height: 90px;
+    }
+    .note-textarea::placeholder { color: var(--text-muted); }
+
+    /* ============================================================
+       TASK / TODO LIST
+    ============================================================ */
+    .todo-list { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+
+    .todo-item { display: flex; align-items: center; gap: 10px; }
+
+    /* Custom styled checkbox */
+    .todo-cb {
+      width: 16px; height: 16px;
+      border-radius: 5px;
+      border: 1.5px solid var(--border);
+      appearance: none;
+      cursor: pointer;
+      position: relative;
+      background: none;
+      flex-shrink: 0;
+      transition: all 0.15s;
+    }
+    .todo-cb:checked { background: var(--accent); border-color: var(--accent); }
+    .todo-cb:checked::after {
+      content: '';
+      position: absolute;
+      left: 4px; top: 1px;
+      width: 5px; height: 9px;
+      border: 2px solid white;
+      border-top: none; border-left: none;
+      transform: rotate(45deg);
+    }
+
+    /* Inline editable task text */
+    .todo-text {
+      flex: 1;
+      background: none;
+      border: none;
+      outline: none;
+      font-family: var(--font-body);
+      font-size: 14px;
+      color: var(--text-primary);
+    }
+    .todo-text.done { text-decoration: line-through; color: var(--text-muted); }
+
+    /* Delete button on each task */
+    .todo-del {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 16px;
+      padding: 0 4px;
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+    .todo-item:hover .todo-del { opacity: 1; }
+    .todo-del:hover { color: var(--danger); }
+
+    /* Add task button */
+    .add-todo {
+      background: none;
+      border: none;
+      font-size: 13px;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 6px 0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-family: var(--font-body);
+      margin-top: 4px;
+    }
+    .add-todo:hover { color: var(--accent); }
+
+    /* ============================================================
+       SAVE BUTTON & STATUS
+       - Calls API Gateway → Lambda → DynamoDB
+    ============================================================ */
+    .save-bar {
+      padding: 12px 28px;
+      background: var(--bg-card);
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .save-btn {
+      padding: 9px 22px;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-family: var(--font-body);
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .save-btn:hover { background: #245a42; }
+    .save-btn:disabled { background: var(--text-muted); cursor: not-allowed; }
+
+    /* Status text shown after save (success/error/saving...) */
+    #save-status { font-size: 13px; color: var(--text-muted); }
+    #save-status.success { color: var(--accent); }
+    #save-status.error   { color: var(--danger); }
+
+    /* ============================================================
+       NOTIFICATION TOAST
+       - Appears at top-right for brief messages
+    ============================================================ */
+    #toast {
+      position: fixed;
+      top: 20px; right: 20px;
+      background: var(--text-primary);
+      color: white;
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-size: 13px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s;
+      z-index: 999;
+    }
+    #toast.show { opacity: 1; }
+
+    /* ============================================================
+       LOADING SPINNER
+       - Shows while fetching entries from DynamoDB via API
+    ============================================================ */
+    .spinner {
+      width: 20px; height: 20px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      display: inline-block;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+
+<body>
+
+<!-- Toast notification element (shown briefly for feedback) -->
+<div id="toast"></div>
+
+<div id="app">
+
+  <!-- ============================================================
+       SIDEBAR
+       - Lists previous journal days
+       - Shows entry count + streak stats
+  ============================================================ -->
+  <div id="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-title">📓 Daily Journal</div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Recent Days</div>
+      <div id="day-list">
+        <!-- Populated dynamically by renderSidebar() -->
+      </div>
+      <button class="add-day-btn" onclick="addToday()">+ New Entry</button>
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-label">Entries</div>
+          <div class="stat-val" id="stat-entries">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Streak</div>
+          <div class="stat-val" id="stat-streak">0d</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       MAIN EDITOR
+       - Header: date, mood picker, tag chips
+       - Body: notes textarea, task list, reflections textarea
+       - Footer: save button + status
+  ============================================================ -->
+  <div id="main">
+
+    <!-- HEADER: date + mood + tags -->
+    <div id="editor-header">
+      <div class="date-label">Today</div>
+      <div class="date-big" id="current-date">—</div>
+
+    
+      <button onclick="logout()"
+        style="position:absolute; top:16px; right:24px; 
+        padding:7px 16px; background:none;
+        border:1px solid var(--border); border-radius:8px;
+        cursor:pointer; font-size:13px; color:var(--text-secondary);">
+        Sign out
+      </button>
+
+      <!-- Mood picker — click to toggle active mood -->
+      <div class="mood-row">
+        <button class="mood-btn" onclick="setMood(this,'😊')" title="Happy">😊</button>
+        <button class="mood-btn" onclick="setMood(this,'😐')" title="Neutral">😐</button>
+        <button class="mood-btn" onclick="setMood(this,'😔')" title="Sad">😔</button>
+        <button class="mood-btn" onclick="setMood(this,'🔥')" title="Productive">🔥</button>
+        <button class="mood-btn" onclick="setMood(this,'😴')" title="Tired">😴</button>
+      </div>
+
+      <!-- Tag chips — click to toggle on/off -->
+      <div class="tag-row">
+        <span class="tag" onclick="toggleTag(this)">work</span>
+        <span class="tag" onclick="toggleTag(this)">personal</span>
+        <span class="tag" onclick="toggleTag(this)">health</span>
+        <span class="tag" onclick="toggleTag(this)">ideas</span>
+        <span class="tag" onclick="toggleTag(this)">grateful</span>
+      </div>
+    </div>
+
+    <!-- SCROLLABLE BODY: notes + tasks + reflections -->
+    <div id="editor-area">
+
+      <!-- SECTION 1: Free-form daily notes -->
+      <div class="section-block">
+        <div class="section-heading">notes</div>
+        <textarea
+          class="note-textarea"
+          id="main-note"
+          placeholder="What's on your mind today…"
+          oninput="markDirty()">
+        </textarea>
+      </div>
+
+      <!-- SECTION 2: Task / To-Do list -->
+      <div class="section-block">
+        <div class="section-heading">tasks</div>
+        <ul class="todo-list" id="todo-list">
+          <!-- Tasks rendered by renderTodos() -->
+        </ul>
+        <button class="add-todo" onclick="addTodo()">+ add task</button>
+      </div>
+
+      <!-- SECTION 3: End-of-day reflections -->
+      <div class="section-block">
+        <div class="section-heading">reflections</div>
+        <textarea
+          class="note-textarea"
+          id="reflect-note"
+          placeholder="What did you learn or feel today…"
+          style="min-height: 70px"
+          oninput="markDirty()">
+        </textarea>
+      </div>
+
+    </div>
+
+    <!-- SAVE BAR: triggers API Gateway call -->
+    <div class="save-bar">
+      <span id="save-status">All changes saved</span>
+      <button class="save-btn" id="save-btn" onclick="saveToCloud()">
+        💾 Save to Cloud
+      </button>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  /* ============================================================
+     SECTION 1 — CONFIGURATION
+     ─────────────────────────────────────────────────────────────
+     IMPORTANT: Replace the API_URL below with your own
+     API Gateway Invoke URL after deploying.
+
+     Format:
+       https://<your-api-id>.execute-api.ap-south-1.amazonaws.com/prod/journal
+
+     How to find it:
+       AWS Console → API Gateway → Your API →
+       Stages → prod → copy "Invoke URL" and add /journal at end
+  ============================================================ */
+  const API_URL = "YOUR_API_GATEWAY_URL/prod/journal";
+
+  // Hardcoded user ID for now — will be replaced by Cognito login later
+  const USER_ID = "user_001";
+
+
+  /* ============================================================
+     SECTION 2 — LOCAL STATE
+     ─────────────────────────────────────────────────────────────
+     'notes'      → object holding all journal data in memory
+     'currentKey' → the date key of the currently open entry (YYYY-MM-DD)
+     'isDirty'    → tracks if unsaved changes exist
+  ============================================================ */
+  const DAYS   = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+  // Load any locally cached notes (fallback when offline)
+  let notes      = JSON.parse(localStorage.getItem('journal_v2') || '{}');
+  let currentKey = null;
+  let isDirty    = false;
+
+
+  /* ============================================================
+     SECTION 3 — DATE HELPERS
+  ============================================================ */
+
+  // Returns today's date as 'YYYY-MM-DD' string (used as unique key)
+  function todayKey() {
+    const d = new Date();
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  }
+
+  // Pads single digit numbers with leading zero e.g. 5 → "05"
+  function pad(n) { return String(n).padStart(2, '0'); }
+
+  // Converts a 'YYYY-MM-DD' key into a human readable label
+  function keyToLabel(k) {
+    const [y, m, d] = k.split('-').map(Number);
+    const dt   = new Date(y, m-1, d);
+    const today = new Date(); today.setHours(0,0,0,0);
+    const diff  = Math.round((today - dt) / 86400000);
+    if (diff === 0) return 'Today';
+    if (diff === 1) return 'Yesterday';
+    return `${DAYS[dt.getDay()].slice(0,3)}, ${MONTHS[m-1].slice(0,3)} ${d}`;
+  }
+
+  // Returns a full readable date string like "Saturday, May 10"
+  function keyToFullDate(k) {
+    const [y, m, d] = k.split('-').map(Number);
+    const dt = new Date(y, m-1, d);
+    return `${DAYS[dt.getDay()]}, ${MONTHS[m-1]} ${d}`;
+  }
+
+  // Ensures today has an entry object in 'notes'
+  function ensureToday() {
+    const k = todayKey();
+    if (!notes[k]) {
+      notes[k] = { text: '', reflect: '', todos: [], mood: null, tags: [] };
+    }
+    return k;
+  }
+
+
+  /* ============================================================
+     SECTION 4 — SIDEBAR RENDERING
+     ─────────────────────────────────────────────────────────────
+     Builds the list of days in the left sidebar.
+     Also calculates and displays the streak counter.
+  ============================================================ */
+  function renderSidebar() {
+    const list = document.getElementById('day-list');
+    const keys = Object.keys(notes).sort().reverse();
+
+    // Update entry count stat
+    document.getElementById('stat-entries').textContent = keys.length;
+
+    // Calculate writing streak (consecutive days with content)
+    let streak = 0;
+    for (let i = 0; i < 365; i++) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const k = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+      const n = notes[k];
+      if (n && (n.text || n.todos.length || n.reflect)) streak++;
+      else if (i > 0) break;
+    }
+    document.getElementById('stat-streak').textContent = streak + 'd';
+
+    // Render each day as a clickable item (show last 15 days max)
+    list.innerHTML = keys.slice(0, 15).map(k => {
+      const n          = notes[k];
+      const hasContent = n.text || n.reflect || n.todos.length;
+      return `
+        <div class="day-item ${hasContent ? 'has-content' : ''} ${k === currentKey ? 'active' : ''}"
+             onclick="loadDay('${k}')">
+          <div class="day-dot"></div>
+          <span>${keyToLabel(k)}</span>
+        </div>`;
+    }).join('');
+  }
+
+
+  /* ============================================================
+     SECTION 5 — LOAD A DAY INTO THE EDITOR
+     ─────────────────────────────────────────────────────────────
+     Called when user clicks a day in sidebar or opens today.
+     Populates all fields (notes, tasks, mood, tags) from 'notes'.
+  ============================================================ */
+  function loadDay(k) {
+    currentKey = k;
+    const n = notes[k] || { text: '', reflect: '', todos: [], mood: null, tags: [] };
+
+    // Update date display in header
+    document.getElementById('current-date').textContent = keyToFullDate(k);
+
+    // Populate text areas
+    document.getElementById('main-note').value    = n.text    || '';
+    document.getElementById('reflect-note').value = n.reflect || '';
+
+    // Restore mood button state
+    document.querySelectorAll('.mood-btn').forEach(b => {
+      b.classList.toggle('active', b.textContent === n.mood);
+    });
+
+    // Restore tag chip states
+    document.querySelectorAll('.tag').forEach(t => {
+      t.classList.toggle('active', (n.tags || []).includes(t.textContent));
+    });
+
+    // Render the task list
+    renderTodos();
+
+    // Reset dirty/unsaved state
+    isDirty = false;
+    setStatus('All changes saved', '');
+
+    // Refresh sidebar to show active highlight
+    renderSidebar();
+  }
+
+
+  /* ============================================================
+     SECTION 6 — TASK / TODO MANAGEMENT
+     ─────────────────────────────────────────────────────────────
+     Tasks are stored as an array of { text, done } objects.
+     Each task renders as a checkbox + editable text input.
+  ============================================================ */
+  function renderTodos() {
+    const n  = notes[currentKey];
+    const ul = document.getElementById('todo-list');
+    if (!n) { ul.innerHTML = ''; return; }
+
+    ul.innerHTML = (n.todos || []).map((t, i) => `
+      <li class="todo-item">
+        <input type="checkbox" class="todo-cb"
+          ${t.done ? 'checked' : ''}
+          onchange="toggleTodo(${i}, this.checked)">
+        <input class="todo-text ${t.done ? 'done' : ''}"
+          value="${escapeHtml(t.text)}"
+          onchange="editTodo(${i}, this.value)"
+          placeholder="Task…">
+        <button class="todo-del" onclick="deleteTodo(${i})" title="Delete task">×</button>
+      </li>`
+    ).join('');
+  }
+
+  // Safely escapes HTML to prevent XSS in task text
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g,'&amp;')
+      .replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;');
+  }
+
+  // Add a blank new task
+  function addTodo() {
+    if (!currentKey) return;
+    notes[currentKey].todos.push({ text: '', done: false });
+    persist(); renderTodos(); markDirty();
+    // Auto-focus the new task input
+    setTimeout(() => {
+      const inputs = document.querySelectorAll('.todo-text');
+      if (inputs.length) inputs[inputs.length - 1].focus();
+    }, 40);
+  }
+
+  // Toggle a task's done state
+  function toggleTodo(i, val) {
+    notes[currentKey].todos[i].done = val;
+    persist(); renderTodos(); markDirty();
+  }
+
+  // Edit a task's text
+  function editTodo(i, val) {
+    notes[currentKey].todos[i].text = val;
+    persist(); markDirty();
+  }
+
+  // Delete a task by index
+  function deleteTodo(i) {
+    notes[currentKey].todos.splice(i, 1);
+    persist(); renderTodos(); markDirty();
+  }
+
+
+  /* ============================================================
+     SECTION 7 — MOOD & TAG INTERACTIONS
+  ============================================================ */
+
+  // Toggle active mood (click same mood again to deselect)
+  function setMood(btn, mood) {
+    if (!currentKey) return;
+    const current = notes[currentKey].mood;
+    notes[currentKey].mood = (current === mood) ? null : mood;
+    persist(); markDirty();
+    document.querySelectorAll('.mood-btn').forEach(b => {
+      b.classList.toggle('active', b.textContent === notes[currentKey].mood);
+    });
+  }
+
+  // Toggle a tag chip on/off
+  function toggleTag(el) {
+    if (!currentKey) return;
+    const tag  = el.textContent;
+    const tags = notes[currentKey].tags || [];
+    const idx  = tags.indexOf(tag);
+    if (idx >= 0) tags.splice(idx, 1);
+    else tags.push(tag);
+    notes[currentKey].tags = tags;
+    persist(); markDirty();
+    el.classList.toggle('active', notes[currentKey].tags.includes(tag));
+  }
+
+
+  /* ============================================================
+     SECTION 8 — LOCAL PERSISTENCE (OFFLINE CACHE)
+     ─────────────────────────────────────────────────────────────
+     Saves notes to browser localStorage as a backup.
+     This means the app still works even without internet —
+     entries are cached locally and synced to cloud on save.
+  ============================================================ */
+  function persist() {
+    try { localStorage.setItem('journal_v2', JSON.stringify(notes)); }
+    catch(e) { console.warn('localStorage save failed:', e); }
+  }
+
+  // Called whenever content changes — marks unsaved state
+  function markDirty() {
+    if (!currentKey) return;
+    // Update local notes object from textarea values
+    notes[currentKey].text    = document.getElementById('main-note').value;
+    notes[currentKey].reflect = document.getElementById('reflect-note').value;
+    persist();
+    isDirty = true;
+    setStatus('Unsaved changes…', '');
+  }
+
+  // Update the status text below save button
+  function setStatus(msg, cls) {
+    const el = document.getElementById('save-status');
+    el.textContent  = msg;
+    el.className    = cls;
+  }
+
+
+  /* ============================================================
+     SECTION 9 — CLOUD SAVE (POST to API Gateway → Lambda → DynamoDB)
+     ─────────────────────────────────────────────────────────────
+     This is the core AWS integration point.
+
+     Flow:
+       1. User clicks "Save to Cloud"
+       2. fetch() sends HTTP POST to API Gateway URL
+       3. API Gateway passes request to Lambda function
+       4. Lambda writes entry to DynamoDB table "JournalEntries"
+       5. Response comes back → we show success or error
+  ============================================================ */
+  async function saveToCloud() {
+    if (!currentKey) return;
+
+    const btn = document.getElementById('save-btn');
+    btn.disabled = true;
+    setStatus('Saving to cloud…', '');
+
+    // Prepare the entry payload to send to Lambda
+    const payload = {
+      entryText: notes[currentKey].text,
+      reflect:   notes[currentKey].reflect,
+      todos:     notes[currentKey].todos,
+      mood:      notes[currentKey].mood,
+      tags:      notes[currentKey].tags,
+      entryDate: currentKey
+    };
+
+    try {
+      /*
+        HTTP POST request to API Gateway.
+        Headers: Content-Type tells API Gateway we are sending JSON.
+        Body: JSON stringified payload containing the journal entry.
+      */
+      const response = await fetch(API_URL, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          userId:    USER_ID,
+          entryText: JSON.stringify(payload)   // store full entry as JSON string in DynamoDB
+        })
+      });
+
+      if (response.ok) {
+        isDirty = false;
+        setStatus('✓ Saved to cloud', 'success');
+        showToast('Entry saved to DynamoDB ✓');
+      } else {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+    } catch (err) {
+      // Network error or Lambda/API Gateway error
+      console.error('Save failed:', err);
+      setStatus('⚠ Save failed — check console', 'error');
+      showToast('Save failed. Entry kept locally.');
+    }
+
+    btn.disabled = false;
+  }
+
+
+  /* ============================================================
+     SECTION 10 — CLOUD LOAD (GET from API Gateway → Lambda → DynamoDB)
+     ─────────────────────────────────────────────────────────────
+     Fetches all past entries from DynamoDB on page load.
+     Merges them into local 'notes' object so they show in sidebar.
+  ============================================================ */
+  async function loadFromCloud() {
+    try {
+      /*
+        HTTP GET request to API Gateway.
+        API Gateway → Lambda → DynamoDB Query → returns all entries.
+      */
+      const response = await fetch(API_URL, { method: 'GET' });
+
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+      const items = await response.json();
+
+      // Merge DynamoDB entries into local notes object
+      items.forEach(item => {
+        try {
+          const data = JSON.parse(item.EntryText || '{}');
+          const key  = data.entryDate || item.EntryTimestamp?.slice(0, 10);
+          if (key) {
+            notes[key] = {
+              text:    data.entryText || '',
+              reflect: data.reflect   || '',
+              todos:   data.todos     || [],
+              mood:    data.mood      || null,
+              tags:    data.tags      || []
+            };
+          }
+        } catch(e) { /* skip malformed entries */ }
+      });
+
+      persist();
+      renderSidebar();
+      showToast('Entries loaded from cloud ✓');
+
+    } catch (err) {
+      // App still works offline — local data is used
+      console.warn('Cloud load failed (using local cache):', err);
+    }
+  }
+
+
+  /* ============================================================
+     SECTION 11 — TOAST NOTIFICATION
+     Shows a brief message at top-right corner of screen
+  ============================================================ */
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2800);
+  }
+
+
+  /* ============================================================
+     SECTION 12 — ADD TODAY BUTTON
+     Creates today's entry if it doesn't exist, then opens it
+  ============================================================ */
+  function addToday() {
+    const k = ensureToday();
+    persist();
+    loadDay(k);
+  }
+
+
+  /* ============================================================
+     SECTION 13 — INITIALISATION
+     ─────────────────────────────────────────────────────────────
+     Runs when page first loads:
+       1. Ensure today's entry exists
+       2. Load today's entry into editor
+       3. Try to fetch past entries from DynamoDB (cloud load)
+  ============================================================ */
+  /* ============================================================
+   COGNITO AUTHENTICATION
+   ─────────────────────────────────────────────────────────
+   Checks if user is logged in before showing journal.
+   If not logged in → redirects to Cognito login page.
+   After login → Cognito sends back a 'code' in URL.
+   We exchange that code for user tokens.
+============================================================ */
+
+// Your Cognito configuration
+    const COGNITO_CONFIG = {
+    domain:      'YOUR_COGNITO_DOMAIN',
+    clientId:    'YOUR_COGNITO_CLIENT_ID',
+    redirectUri: 'YOUR_CLOUDFRONT_URL',
+    loginUrl:    'YOUR_COGNITO_DOMAIN/login'
+  };  
+
+  // Check if user is authenticated
+  function checkAuth() {
+    // Check if we already have a token stored
+    const token = sessionStorage.getItem('cognito_token');
+    
+    // Check if Cognito just redirected back with a code
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get('code');
+
+    if (token) {
+      // Already logged in → show journal ✅
+      document.getElementById('app').style.display = 'flex';
+      return;
+    }
+
+    if (code) {
+      // Cognito sent back a code → store it as token and show journal
+      sessionStorage.setItem('cognito_token', code);
+      // Clean up URL (remove ?code=xxx from address bar)
+      window.history.replaceState({}, document.title, '/');
+      document.getElementById('app').style.display = 'flex';
+      return;
+    }
+
+    // Not logged in → hide journal and redirect to Cognito login
+    document.getElementById('app').style.display = 'none';
+    window.location.href = `${COGNITO_CONFIG.loginUrl}?client_id=${COGNITO_CONFIG.clientId}&response_type=code&scope=email+openid&redirect_uri=${encodeURIComponent(COGNITO_CONFIG.redirectUri)}`;
+  }
+
+  // Logout function
+  function logout() {
+    sessionStorage.removeItem('cognito_token');
+    window.location.href = `https://${COGNITO_CONFIG.domain}/logout?client_id=${COGNITO_CONFIG.clientId}&logout_uri=${encodeURIComponent(COGNITO_CONFIG.redirectUri)}`;
+  }
+
+// Run auth check immediately when page loads
+checkAuth();
+
+  (function init() {
+    const k = ensureToday();
+    persist();
+    loadDay(k);
+    loadFromCloud();   // async — loads cloud data in background
+  })();
+
+</script>
+</body>
+</html>
+
+
+
+<!--
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--font-sans); }
+#app { display: flex; height: 580px; background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); overflow: hidden; }
+#sidebar { width: 220px; min-width: 220px; background: var(--color-background-secondary); border-right: 0.5px solid var(--color-border-tertiary); display: flex; flex-direction: column; }
+.sidebar-header { padding: 16px; border-bottom: 0.5px solid var(--color-border-tertiary); }
+.sidebar-title { font-size: 14px; font-weight: 500; color: var(--color-text-primary); display: flex; align-items: center; gap: 8px; }
+.sidebar-title span { font-size: 16px; }
+.sidebar-section { padding: 8px; }
+.sidebar-label { font-size: 11px; color: var(--color-text-tertiary); padding: 8px 8px 4px; text-transform: uppercase; letter-spacing: 0.06em; }
+.day-item { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: var(--border-radius-md); cursor: pointer; font-size: 13px; color: var(--color-text-secondary); transition: background 0.1s; user-select: none; }
+.day-item:hover { background: var(--color-background-tertiary); color: var(--color-text-primary); }
+.day-item.active { background: var(--color-background-primary); color: var(--color-text-primary); font-weight: 500; border: 0.5px solid var(--color-border-tertiary); }
+.day-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--color-border-secondary); flex-shrink: 0; }
+.day-item.has-content .day-dot { background: #1D9E75; }
+.add-day-btn { margin: 8px; padding: 8px 10px; border-radius: var(--border-radius-md); border: 0.5px dashed var(--color-border-secondary); background: none; color: var(--color-text-tertiary); font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px; width: calc(100% - 16px); transition: all 0.1s; }
+.add-day-btn:hover { background: var(--color-background-tertiary); color: var(--color-text-secondary); border-color: var(--color-border-primary); }
+#main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+#editor-header { padding: 20px 24px 12px; border-bottom: 0.5px solid var(--color-border-tertiary); display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.date-display { display: flex; flex-direction: column; gap: 2px; }
+.date-label { font-size: 11px; color: var(--color-text-tertiary); text-transform: uppercase; letter-spacing: 0.06em; }
+.date-big { font-size: 22px; font-weight: 500; color: var(--color-text-primary); }
+.tag-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.tag { font-size: 11px; padding: 3px 8px; border-radius: 20px; background: var(--color-background-secondary); color: var(--color-text-secondary); border: 0.5px solid var(--color-border-tertiary); cursor: pointer; user-select: none; }
+.tag:hover { border-color: var(--color-border-primary); }
+.tag.active { background: #E1F5EE; color: #0F6E56; border-color: #5DCAA5; }
+.mood-row { display: flex; gap: 6px; margin-top: 6px; }
+.mood-btn { font-size: 14px; padding: 4px 10px; border-radius: 20px; border: 0.5px solid var(--color-border-tertiary); background: none; cursor: pointer; opacity: 0.5; transition: all 0.1s; }
+.mood-btn:hover, .mood-btn.active { opacity: 1; background: var(--color-background-secondary); border-color: var(--color-border-secondary); transform: scale(1.1); }
+#editor-area { flex: 1; overflow-y: auto; padding: 20px 24px; }
+.section-block { margin-bottom: 20px; }
+.section-heading { font-size: 11px; color: var(--color-text-tertiary); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+.section-heading::after { content: ''; flex: 1; height: 0.5px; background: var(--color-border-tertiary); }
+.note-textarea { width: 100%; border: none; background: none; resize: none; font-family: var(--font-sans); font-size: 14px; color: var(--color-text-primary); line-height: 1.7; outline: none; min-height: 80px; }
+.note-textarea::placeholder { color: var(--color-text-tertiary); }
+.todo-list { list-style: none; display: flex; flex-direction: column; gap: 4px; }
+.todo-item { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--color-text-primary); }
+.todo-cb { width: 15px; height: 15px; border-radius: 4px; border: 0.5px solid var(--color-border-secondary); appearance: none; cursor: pointer; position: relative; background: none; flex-shrink: 0; }
+.todo-cb:checked { background: #1D9E75; border-color: #1D9E75; }
+.todo-cb:checked::after { content: ''; position: absolute; left: 4px; top: 2px; width: 5px; height: 8px; border: 2px solid white; border-top: none; border-left: none; transform: rotate(45deg); }
+.todo-text { flex: 1; background: none; border: none; outline: none; font-family: var(--font-sans); font-size: 14px; color: var(--color-text-primary); }
+.todo-text.done { text-decoration: line-through; color: var(--color-text-tertiary); }
+.add-todo { background: none; border: none; font-size: 13px; color: var(--color-text-tertiary); cursor: pointer; padding: 4px 0; display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+.add-todo:hover { color: var(--color-text-secondary); }
+.stats-row { display: flex; gap: 10px; margin-top: 8px; }
+.stat-card { flex: 1; background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 10px 12px; }
+.stat-label { font-size: 11px; color: var(--color-text-tertiary); }
+.stat-val { font-size: 18px; font-weight: 500; color: var(--color-text-primary); }
+</style>
+
+<div id="app">
+  <div id="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-title"><span>📓</span> Daily Notes</div>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-label">Recent</div>
+      <div id="day-list"></div>
+      <button class="add-day-btn" onclick="addToday()">+ New day</button>
+    </div>
+    <div style="margin-top: auto; padding: 12px; border-top: 0.5px solid var(--color-border-tertiary);">
+      <div class="stats-row">
+        <div class="stat-card"><div class="stat-label">Entries</div><div class="stat-val" id="stat-entries">0</div></div>
+        <div class="stat-card"><div class="stat-label">Streak</div><div class="stat-val" id="stat-streak">0d</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="main">
+    <div id="editor-header">
+      <div style="flex:1">
+        <div class="date-display">
+          <div class="date-label">Today</div>
+          <div class="date-big" id="current-date">—</div>
+        </div>
+        <div class="mood-row">
+          <button class="mood-btn" onclick="setMood(this,'😊')">😊</button>
+          <button class="mood-btn" onclick="setMood(this,'😐')">😐</button>
+          <button class="mood-btn" onclick="setMood(this,'😔')">😔</button>
+          <button class="mood-btn" onclick="setMood(this,'🔥')">🔥</button>
+          <button class="mood-btn" onclick="setMood(this,'😴')">😴</button>
+        </div>
+        <div class="tag-row">
+          <span class="tag" onclick="toggleTag(this)">work</span>
+          <span class="tag" onclick="toggleTag(this)">personal</span>
+          <span class="tag" onclick="toggleTag(this)">health</span>
+          <span class="tag" onclick="toggleTag(this)">ideas</span>
+          <span class="tag" onclick="toggleTag(this)">grateful</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="editor-area">
+      <div class="section-block">
+        <div class="section-heading">notes</div>
+        <textarea class="note-textarea" id="main-note" placeholder="What's on your mind today…" oninput="saveNote()"></textarea>
+      </div>
+      <div class="section-block">
+        <div class="section-heading">tasks</div>
+        <ul class="todo-list" id="todo-list"></ul>
+        <button class="add-todo" onclick="addTodo()">+ add task</button>
+      </div>
+      <div class="section-block">
+        <div class="section-heading">reflections</div>
+        <textarea class="note-textarea" id="reflect-note" placeholder="What did you learn or feel today…" style="min-height:60px" oninput="saveNote()"></textarea>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+let notes = JSON.parse(localStorage.getItem('dailynotes_v1') || '{}');
+let currentKey = null;
+
+function todayKey() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function keyToLabel(k) {
+  const [y,m,d] = k.split('-').map(Number);
+  const dt = new Date(y, m-1, d);
+  const today = new Date(); today.setHours(0,0,0,0);
+  const diff = Math.round((today - dt) / 86400000);
+  if (diff === 0) return 'Today';
+  if (diff === 1) return 'Yesterday';
+  return `${DAYS[dt.getDay()].slice(0,3)}, ${MONTHS[m-1].slice(0,3)} ${d}`;
+}
+
+function ensureToday() {
+  const k = todayKey();
+  if (!notes[k]) notes[k] = { text: '', reflect: '', todos: [], mood: null, tags: [] };
+  return k;
+}
+
+function renderSidebar() {
+  const list = document.getElementById('day-list');
+  const keys = Object.keys(notes).sort().reverse();
+  document.getElementById('stat-entries').textContent = keys.length;
+  let streak = 0;
+  for (let i = 0; i < 365; i++) {
+    const d = new Date(); d.setDate(d.getDate()-i);
+    const k = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    if (notes[k] && (notes[k].text || notes[k].todos.length)) streak++;
+    else if (i > 0) break;
+  }
+  document.getElementById('stat-streak').textContent = streak + 'd';
+  list.innerHTML = keys.slice(0,10).map(k => {
+    const n = notes[k];
+    const hasContent = n.text || n.reflect || n.todos.length;
+    return `<div class="day-item ${hasContent?'has-content':''} ${k===currentKey?'active':''}" onclick="loadDay('${k}')">
+      <div class="day-dot"></div>
+      <span>${keyToLabel(k)}</span>
+    </div>`;
+  }).join('');
+}
+
+function loadDay(k) {
+  currentKey = k;
+  const n = notes[k] || { text: '', reflect: '', todos: [], mood: null, tags: [] };
+  const [y,m,d] = k.split('-').map(Number);
+  const dt = new Date(y, m-1, d);
+  document.getElementById('current-date').textContent = `${DAYS[dt.getDay()]}, ${MONTHS[m-1]} ${d}`;
+  document.getElementById('main-note').value = n.text || '';
+  document.getElementById('reflect-note').value = n.reflect || '';
+  document.querySelectorAll('.mood-btn').forEach(b => b.classList.toggle('active', b.textContent === n.mood));
+  document.querySelectorAll('.tag').forEach(t => t.classList.toggle('active', (n.tags||[]).includes(t.textContent)));
+  renderTodos();
+  renderSidebar();
+}
+
+function renderTodos() {
+  const n = notes[currentKey];
+  if (!n) return;
+  const ul = document.getElementById('todo-list');
+  ul.innerHTML = (n.todos || []).map((t, i) =>
+    `<li class="todo-item">
+      <input type="checkbox" class="todo-cb" ${t.done?'checked':''} onchange="toggleTodo(${i}, this.checked)">
+      <input class="todo-text ${t.done?'done':''}" value="${t.text}" onchange="editTodo(${i}, this.value)" placeholder="Task...">
+    </li>`
+  ).join('');
+}
+
+function saveNote() {
+  if (!currentKey) return;
+  notes[currentKey].text = document.getElementById('main-note').value;
+  notes[currentKey].reflect = document.getElementById('reflect-note').value;
+  persist();
+  renderSidebar();
+}
+
+function addTodo() {
+  if (!currentKey) return;
+  notes[currentKey].todos.push({ text: '', done: false });
+  persist();
+  renderTodos();
+  setTimeout(() => {
+    const inputs = document.querySelectorAll('.todo-text');
+    if (inputs.length) inputs[inputs.length-1].focus();
+  }, 50);
+}
+
+function toggleTodo(i, val) {
+  notes[currentKey].todos[i].done = val;
+  persist();
+  renderTodos();
+}
+
+function editTodo(i, val) {
+  notes[currentKey].todos[i].text = val;
+  persist();
+}
+
+function setMood(btn, mood) {
+  if (!currentKey) return;
+  const current = notes[currentKey].mood;
+  notes[currentKey].mood = (current === mood) ? null : mood;
+  persist();
+  document.querySelectorAll('.mood-btn').forEach(b => b.classList.toggle('active', b.textContent === notes[currentKey].mood));
+}
+
+function toggleTag(el) {
+  if (!currentKey) return;
+  const tag = el.textContent;
+  const tags = notes[currentKey].tags || [];
+  const idx = tags.indexOf(tag);
+  if (idx >= 0) tags.splice(idx, 1); else tags.push(tag);
+  notes[currentKey].tags = tags;
+  persist();
+  el.classList.toggle('active', notes[currentKey].tags.includes(tag));
+}
+
+function addToday() {
+  const k = ensureToday();
+  persist();
+  loadDay(k);
+}
+
+function persist() {
+  try { localStorage.setItem('dailynotes_v1', JSON.stringify(notes)); } catch(e) {}
+}
+
+const k = ensureToday();
+persist();
+loadDay(k);
+</script>
+-->
